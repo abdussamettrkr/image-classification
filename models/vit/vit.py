@@ -140,7 +140,7 @@ class VisionTransformer(nn.Module):
         self.num_features = self.embed_dim = embed_dim
 
         self.patch_embed = PatchEmbed(
-            img_size=img_size[0], patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
+            img_size=img_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -233,10 +233,10 @@ class VisionTransformer(nn.Module):
         return output
 
 
-def vit_tiny(patch_size=16, **kwargs):
+def vit_tiny(patch_size=16,img_size=224, **kwargs):
     model = VisionTransformer(
         patch_size=patch_size, embed_dim=192, depth=12, num_heads=3, mlp_ratio=4,
-        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+        qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6),img_size=img_size, **kwargs)
     return model
 
 

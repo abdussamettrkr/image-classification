@@ -1,0 +1,10 @@
+arch: 'vit_small' #'vit_tiny','vit_small','vit_base'
+patch_size: 16    #VIT square patch sizes. Default 16
+use_fp16: True
+clip_grad: 3.0
+epochs: 1000
+lr: 0.0005
+warmup_epochs: 10
+min_lr: 0.000001
+optimizer: 'adamw'
+drop_path_rate: 0.1 #stochastic depth rate
