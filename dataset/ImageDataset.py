@@ -53,8 +53,7 @@ class ImageDataset(Dataset):
         
         image_path,label = self.images[index]
         img = Image.open(image_path)
-        
-
+        img = img.convert('RGB')   
 
         if self.transform:
             img = self.transform(img)

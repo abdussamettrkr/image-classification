@@ -1,3 +1,4 @@
+from logging import root
 import torch
 import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
@@ -17,6 +18,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser(description="VIT Image Classification Training")
 #parser.add_argument('--dataset', default="cifar10", choices=['cifar10','custom'],)
 parser.add_argument("--dataset-path", required=True, type=str)
+parser.add_argument("--val-path", required=True, type=str)
 parser.add_argument("--img-size", default=224,type=int)
 parser.add_argument("--batch-size",required=True,type=int)
 parser.add_argument("--num-workers",default=4,type=int)
@@ -57,6 +59,9 @@ def train(train_loader,model, criterion, optimizer, epoch,lr_scheduler,model_con
         targets = targets.cuda().long()
         
         data_time = time.time() - end
+
+        if it >= 100:
+            break
 
         it = len(train_loader)*epoch + it
         
@@ -114,6 +119,35 @@ def train(train_loader,model, criterion, optimizer, epoch,lr_scheduler,model_con
 
     return loss_current
 
+def evaluate(model,data_loader,criterion):
+    model.eval()
+
+    total_correct = 0
+    batch_size=0
+    total_loss = 0
+    current_iter = 0
+    current_acc = 0
+    for it, (images,targets) in enumerate(pbar :=tqdm(data_loader)):
+        images = torch.stack([img.cuda() for img in images])
+        targets = targets.cuda().long()
+        output = model(images)
+        loss = criterion(output, targets)
+
+        batch_size = targets.size(0)
+        soft = nn.Softmax(dim=1)
+        output = soft(output)
+
+        correct = (torch.argmax(output)==torch.argmax(targets)).float().sum()
+        total_correct += correct
+
+        current_iter+=1
+        current_acc = total_correct/(current_iter*batch_size)
+
+        total_loss += loss.item()
+        pbar.set_postfix({'Loss':loss.item(),'Accuracy':current_acc})
+
+
+    return total_correct/(batch_size*current_iter), total_loss/current_iter
 
 
 
@@ -125,20 +159,36 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-    transform = T.Compose([
-        T.RandomResizedCrop(args.img_size,scale=(0.9,1.1)),
+    transform_train = T.Compose([
+        
+        T.RandomResizedCrop(args.img_size,scale=(0.9,1)),
         T.RandomRotation(degrees=(-20,20)),
+        T.Resize(args.img_size),    
         T.ToTensor()
     ])
 
-    train_dataset = ImageDataset(root_dir=args.dataset_path,transform=transform)
+    transform_val = T.Compose([
+        T.Resize(args.img_size),            
+        T.ToTensor()
+    ])
+
+    train_dataset = ImageDataset(root_dir=args.dataset_path,transform=transform_train)
+    val_dataset = ImageDataset(root_dir=args.val_path,transform=transform_val)
+
+
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,             
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        pin_memory=True,
         shuffle=True,
+        drop_last=True
+    )    
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,             
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
         drop_last=True
     )    
 
@@ -165,15 +215,19 @@ def main():
 
     for epoch in range(last_epoch + 1, args.epochs):
         loss = train(train_loader,model,criterion,optimizer,epoch,lr_schedule,model_config,fp16_scaler)
+
+        val_acc,val_loss = evaluate(model,val_loader,criterion)
+
+        print('Epoch {}, val accuracy: {}'.format(epoch,val_acc))
         
-        if loss < best_loss:
-            best_loss = loss
+        if val_loss < best_loss:
+            best_loss = val_loss
         
         state_dict = {
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'last_epoch': epoch,            
-            'best_loss': best_loss
+            'best_loss': val_loss
         }
         
         if epoch % args.save_freq == 0 and epoch != 0:
